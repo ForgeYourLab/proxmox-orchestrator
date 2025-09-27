@@ -1,0 +1,11 @@
+vmid: 601
+hostname: "fyl-bind9"
+cores: 2
+memory: 8192
+disk_size: 24G
+network_bridge: vmbr50
+storage_layout: lvm
+custom_packages:
+  - curl
+custom_runcmd:
+  - echo "hello" > ~/hello.txt

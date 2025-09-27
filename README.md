@@ -33,6 +33,13 @@ $ ansible-vault encrypt --encrypt-vault-id dummy inventory/hosts.vault.yml
 $ ansible-vault decrypt inventory/hosts.yml
 ```
 
+During development, you can use these commands
+
+```sh
+find inventory -type f -name "*.vault.yml" -exec ansible-vault encrypt --encrypt-vault-id dummy {} \;
+find inventory -type f -name "*.vault.yml" -exec ansible-vault decrypt {} \;
+```
+
 ## License
 
 Licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), (see

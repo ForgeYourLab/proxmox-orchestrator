@@ -1,0 +1,84 @@
+- name: Resolve Proxmox connection facts
+  ansible.builtin.set_fact:
+    create_nocloud_seed_pve_host: "{{ hostvars[proxmox_host_name].proxmox_api_host | default(hostvars[proxmox_host_name].ansible_host) }}"
+
+- name: Ensure temp dir
+  ansible.builtin.file:
+    path: "{{ create_nocloud_seed_temp_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Render meta-data
+  ansible.builtin.template:
+    src: meta-data.j2
+    dest: "{{ create_nocloud_seed_temp_dir }}/vm-{{ vmid }}-meta.yaml"
+    mode: '0644'
+  delegate_to: localhost
+  no_log: true
+
+- name: Render user-data
+  ansible.builtin.template:
+    src: user-data.j2
+    dest: "{{ create_nocloud_seed_temp_dir }}/vm-{{ vmid }}-user.yaml"
+    mode: '0640'
+  delegate_to: localhost
+  no_log: true
+
+- name: Scan SSH host keys for Proxmox
+  ansible.builtin.command:
+    argv:
+      - ssh-keyscan
+      - -q
+      - -T
+      - "5"
+      - -p
+      - "{{ proxmox_ssh_port | default(22) }}"
+      # - -H
+      - -t
+      - rsa,ecdsa,ed25519
+      - "{{ create_nocloud_seed_pve_host }}"
+      - "2>/dev/null"
+  register: create_nocloud_seed_proxmox_hostkeys
+  changed_when: false
+  retries: 3
+  delay: 2
+  until: create_nocloud_seed_proxmox_hostkeys.rc == 0 and create_nocloud_seed_proxmox_hostkeys.stdout | length > 0
+  delegate_to: localhost
+  no_log: true
+
+- name: Add Proxmox to known_hosts
+  ansible.builtin.known_hosts:
+    path: "{{ ssh_known_host_path }}"
+    name: "{{ create_nocloud_seed_pve_host }}"
+    key: "{{ item }}"
+    # TODO: all hosts needs to be updated before we can turn this on
+    # hash_host: true
+    state: present
+  loop: "{{ create_nocloud_seed_proxmox_hostkeys.stdout_lines }}"
+  delegate_to: localhost
+  no_log: true
+
+- name: Copy snippets to Proxmox # noqa: no-changed-when
+  ansible.builtin.command:
+    argv:
+      - scp
+      - "-i"
+      - "{{ proxmox_ssh_private_key_file }}"
+      - "-P"
+      - "{{ proxmox_ssh_port | string }}"
+      - "-o"
+      - "IdentitiesOnly=yes"
+      - "-o"
+      - "StrictHostKeyChecking=yes"
+      - "{{ create_nocloud_seed_temp_dir }}/vm-{{ vmid }}-meta.yaml"
+      - "{{ create_nocloud_seed_temp_dir }}/vm-{{ vmid }}-user.yaml"
+      - "{{ proxmox_ssh_user }}@{{ create_nocloud_seed_pve_host }}:/var/lib/vz/snippets/"
+  delegate_to: localhost
+  no_log: true
+
+- name: Cleanup temp dir
+  ansible.builtin.file:
+    path: "{{ create_nocloud_seed_temp_dir }}"
+    state: absent
+  delegate_to: localhost

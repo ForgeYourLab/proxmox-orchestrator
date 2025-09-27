@@ -1,6 +1,13 @@
 - name: Verify Proxmox API connectivity
   hosts: proxmox_hosts
   gather_facts: false
-
   roles:
     - proxmox_check
+
+- name: Provision Proxmox VMs with NoCloud
+  hosts: proxmox_vms
+  gather_facts: false
+  roles:
+    - create_nocloud_seed
+    # - create_proxmox_vms
+  tags: provision
