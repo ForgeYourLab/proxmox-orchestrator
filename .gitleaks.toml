@@ -1,0 +1,4 @@
+title = "Proxmox-VM-Orchestrator gitleaks config"
+
+[allowlist]
+paths = ['''^\.git/''', '''^\.env/''', '''^\.ansible/''']

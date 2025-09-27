@@ -1,0 +1,10 @@
+.DS_Store
+.idea/
+.vscode/
+.env/
+*.env
+*.env.*
+
+.ansible-vault-pass.txt
+ansible.log
+.ansible/

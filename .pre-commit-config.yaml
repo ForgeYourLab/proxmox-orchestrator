@@ -1,0 +1,102 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents, --unsafe]
+      - id: check-json
+      - id: check-toml
+      - id: fix-byte-order-marker
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v25.9.0
+    hooks:
+      - id: ansible-lint
+        name: Run ansible-lint
+        description: Lints Ansible playbooks and roles
+        files: \.(yml|yaml)$
+        args: [--profile=production]
+
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.14.0
+    hooks:
+      - id: yamlfmt
+        files: \.ya?ml$
+        exclude: '(^|/).*\.vault\.ya?ml$'
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.15.0
+    hooks:
+      - id: markdownlint-cli2
+        files: \.(md|markdown)$
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npx prettier --write
+        language: system
+        files: \.(md|markdown|json)$
+        exclude: ^(\.ansible|\.env|\.git)/
+        pass_filenames: true
+
+  # Secret scanning
+
+  - repo: local
+    hooks:
+      - id: gitleaks-protect
+        name: gitleaks protect (staged)
+        entry: bash -c 'gitleaks protect --staged --redact --config .gitleaks.toml'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: gitleaks-protect
+        name: gitleaks detect (push)
+        entry: bash -c 'gitleaks detect --redact --config .gitleaks.toml'
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+
+  # Extra check (this is slower)
+  - repo: local
+    hooks:
+      - id: trufflehog-fs
+        name: TruffleHog scan (push)
+        entry: bash -c 'trufflehog filesystem --fail --no-update --results=verified,unknown --json . > /dev/null'
+        language: system
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+        exclude: ^(\.ansible|\.env|\.git)/
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ["scan"]
+        exclude: ^(\.ansible|\.env|\.git)/
+
+  - repo: local
+    hooks:
+      - id: check-expected-vault-files-encryption
+        name: Ensure *.vault.yml/.yaml are fully Ansible-Vault encrypted
+        entry: scripts/check-vault.sh
+        language: script
+        files: '(^|/)[^/]+\.vault\.ya?ml$'
+        pass_filenames: true
+        stages: [pre-commit]

@@ -1,0 +1,29 @@
+- name: Fetch all VMs from proxmox node
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    # TODO: Use cert bundle to enable cert validation
+    validate_certs: false
+    node: proxmox
+  # environment:
+  #   REQUESTS_CA_BUNDLE: "{{ proxmox_ca_bundle }}"
+  register: proxmox_check_vm_info
+  delegate_to: localhost
+  no_log: true
+
+- name: Compute VM status counts
+  vars:
+    vms: "{{ proxmox_check_vm_info.proxmox_vms | default([]) }}"
+  ansible.builtin.set_fact:
+    proxmox_check_vm_counts:
+      running: "{{ vms | selectattr('status', 'equalto', 'running') | list | length }}"
+      stopped: "{{ vms | selectattr('status', 'equalto', 'stopped') | list | length }}"
+      others: "{{ (vms | rejectattr('status', 'equalto', 'running') | rejectattr('status', 'equalto', 'stopped') | list | length) }}"
+
+  no_log: true
+
+- name: Display VM summary
+  ansible.builtin.debug:
+    msg: "running ({{ proxmox_check_vm_counts.running }}), stopped ({{ proxmox_check_vm_counts.stopped }}), others ({{ proxmox_check_vm_counts.others }})"

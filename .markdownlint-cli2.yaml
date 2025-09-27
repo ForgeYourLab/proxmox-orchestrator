@@ -1,0 +1,12 @@
+config:
+  default: true
+  MD013: {line_length: 120}
+  MD014: false
+  MD033: false
+  MD041: false
+globs:
+  - "**/*.md"
+ignores:
+  - ".ansible/**"
+  - ".env/**"
+  - ".git/**"
