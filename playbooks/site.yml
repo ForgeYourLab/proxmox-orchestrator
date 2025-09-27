@@ -10,4 +10,5 @@
   roles:
     - create_nocloud_seed
     # - create_proxmox_vms
+    - cleanup_nocloud_seed
   tags: provision
