@@ -9,6 +9,6 @@
   gather_facts: false
   roles:
     - create_nocloud_seed
-    # - create_proxmox_vms
+    - create_proxmox_vm
     - cleanup_nocloud_seed
   tags: provision

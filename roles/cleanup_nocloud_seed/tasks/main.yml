@@ -20,10 +20,3 @@
   remote_user: "{{ proxmox_ssh_user }}"
   register: cleanup_nocloud_seed_removed
   no_log: true
-
-- name: Report removed files
-  ansible.builtin.debug:
-    msg: "Removed: {{ item.item }}"
-  loop: "{{ cleanup_nocloud_seed_removed.results | selectattr('changed','equalto',true) | list }}"
-  when: cleanup_nocloud_seed_report | default(false)
-  delegate_to: localhost

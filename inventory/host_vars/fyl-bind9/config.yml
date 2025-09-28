@@ -1,9 +1,44 @@
 vmid: 601
 hostname: "fyl-bind9"
-cores: 2
-memory: 8192
-disk_size: 24G
-network_bridge: vmbr50
+# tags is reserved in ansible
+vm_tags: ["vm", "demo"]
+
+cpu:
+  type: x86-64-v2-AES
+  sockets: 1
+  cores: 2
+  memory_mb: 8192
+ostype: l26
+qemu_agent: true
+
+# main disk
+disk:
+  bus: scsi0
+  storage: nvme-vms
+  size: "24G"
+  scsihw: virtio-scsi-single
+  bootdisk: scsi0
+
+network:
+  model: virtio
+  bridge: vmbr50
+  vlan: null
+  firewall: true
+
+cloud_init:
+  bus: ide2
+  storage: local
+
+iso:
+  attach: true
+  storage: nas-isos
+  file: ubuntu-24.04.1-live-server-amd64.iso
+  bus: ide0
+
+boot:
+  order: ["scsi0", "ide2", "ide0", "net0"]
+
+# used by cloud-init no cloud seed; not by VM creation
 storage_layout: lvm
 custom_packages:
   - curl

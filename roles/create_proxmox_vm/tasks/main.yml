@@ -1,0 +1,179 @@
+- name: Set PVE host
+  ansible.builtin.set_fact:
+    create_proxmox_vm_pve_host: "{{ hostvars[proxmox_host_name].proxmox_api_host | default(hostvars[proxmox_host_name].ansible_host) }}"
+  no_log: true
+
+- name: Validate required minimum inputs
+  ansible.builtin.assert:
+    that:
+      - create_proxmox_vm_vmid is defined
+      - create_proxmox_vm_name is defined
+    fail_msg: "vmid and hostname are required"
+
+- name: Fetch VMs on node to verify
+  community.proxmox.proxmox_vm_info:
+    api_host: "{{ create_proxmox_vm_pve_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    # TODO: Use cert bundle to enable cert validation
+    validate_certs: false
+    node: "{{ proxmox_host_name }}"
+  register: create_proxmox_vm_vminfo
+  delegate_to: localhost
+  changed_when: false
+  no_log: true
+
+- name: Check if VMID is unused (neither running nor stopped)
+  ansible.builtin.assert:
+    that:
+      - (create_proxmox_vm_vminfo.proxmox_vms | selectattr('vmid','equalto', create_proxmox_vm_vmid|int) | list | length) == 0
+    fail_msg: >
+      VM with vmid={{ create_proxmox_vm_vmid }} already exists on node {{ create_proxmox_vm_pve_node }}.
+
+# Prepare net0
+- name: Build net0 string
+  ansible.builtin.set_fact:
+    create_proxmox_vm_net0_str: >-
+      {{ create_proxmox_vm_net_model }}, bridge={{ create_proxmox_vm_network_bridge }}
+      {{ (create_proxmox_vm_network_vlan is defined and create_proxmox_vm_network_vlan is not none)
+      | ternary(',tag=' ~ (create_proxmox_vm_network_vlan|string), '') }}
+      {{ (create_proxmox_vm_network_firewall | bool) | ternary(',firewall=1', '') }}
+
+- name: Build net0 map
+  ansible.builtin.set_fact:
+    create_proxmox_vm_net_map:
+      net0: "{{ create_proxmox_vm_net0_str | regex_replace('\\s+', '') }}"
+# END - net0
+
+- name: Build scsi0 map
+  ansible.builtin.set_fact:
+    create_proxmox_vm_scsi_map: >-
+      {{
+        { create_proxmox_vm_disk_bus:
+            (create_proxmox_vm_storage ~ ':' ~ (create_proxmox_vm_disk_size_gb | string))
+        }
+      }}
+
+- name: Create VM shell (absent -> present)
+  community.general.proxmox_kvm:
+    api_host: "{{ create_proxmox_vm_pve_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    validate_certs: "{{ create_proxmox_vm_validate_certs }}"
+    node: "{{ proxmox_host_name }}"
+    vmid: "{{ create_proxmox_vm_vmid }}"
+    name: "{{ create_proxmox_vm_name }}"
+    ostype: "{{ create_proxmox_vm_ostype }}"
+    memory: "{{ create_proxmox_vm_memory_mb }}"
+    sockets: "{{ create_proxmox_vm_sockets }}"
+    cores: "{{ create_proxmox_vm_cores }}"
+    cpu: "{{ create_proxmox_vm_cpu_type }}"
+    scsihw: "{{ create_proxmox_vm_scsihw }}"
+    bootdisk: "{{ create_proxmox_vm_bootdisk }}"
+    scsi: "{{ create_proxmox_vm_scsi_map }}"
+    net: "{{ create_proxmox_vm_net_map }}"
+    agent: "{{ 1 if create_proxmox_vm_qemu_agent else 0 }}"
+    tags: "{{ create_proxmox_vm_tags_list | default(omit) }}"
+    state: present
+  delegate_to: localhost
+  no_log: true
+
+# TODO: update network config to have specific IP
+
+- name: Wait 10s for Proxmox to finalize VM metadata
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Read VM config (pvesh json)
+  ansible.builtin.command:
+    argv:
+      - pvesh
+      - get
+      - "/nodes/{{ proxmox_host_name }}/qemu/{{ create_proxmox_vm_vmid }}/config"
+      - --output-format
+      - json
+  register: create_proxmox_vm_cfg_raw
+  changed_when: false
+  delegate_to: "{{ proxmox_host_name }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+
+- name: Parse VM config
+  ansible.builtin.set_fact:
+    create_proxmox_vm_cfg: "{{ create_proxmox_vm_cfg_raw.stdout | from_json }}"
+
+# Cloud Init
+- name: Build expected CI / ISO / boot strings
+  ansible.builtin.set_fact:
+    create_proxmox_vm_cicustom_sanitized: "{{ create_proxmox_vm_cicustom | regex_replace('\\s+', '') }}"
+    create_proxmox_vm_iso_str: "{{ create_proxmox_vm_iso_storage }}:iso/{{ create_proxmox_vm_iso_file }},media=cdrom"
+    create_proxmox_vm_boot_str: "order={{ create_proxmox_vm_boot_order_str }}"
+
+- name: Ensure CI drive on {{ create_proxmox_vm_ci_bus }}
+  ansible.builtin.command:
+    argv: ["qm", "set", "{{ create_proxmox_vm_vmid }}", "--{{ create_proxmox_vm_ci_bus }}", "{{ create_proxmox_vm_ci_target }}"]
+  when: (create_proxmox_vm_cfg[create_proxmox_vm_ci_bus] | default('')) != create_proxmox_vm_ci_target
+  register: create_proxmox_vm_set_ci_bus
+  changed_when: create_proxmox_vm_set_ci_bus.rc == 0
+  delegate_to: "{{ proxmox_host_name }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+
+- name: Ensure cicustom points to snippets
+  ansible.builtin.command:
+    argv: ["qm", "set", "{{ create_proxmox_vm_vmid }}", "--cicustom", "{{ create_proxmox_vm_cicustom_sanitized }}"]
+  when: (create_proxmox_vm_cfg.cicustom | default('')) != create_proxmox_vm_cicustom_sanitized
+  register: create_proxmox_vm_set_cicustom_result
+  changed_when: create_proxmox_vm_set_cicustom_result.rc == 0
+  delegate_to: "{{ proxmox_host_name }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+
+- name: Attach ISO if requested
+  ansible.builtin.command:
+    argv: ["qm", "set", "{{ create_proxmox_vm_vmid }}", "--{{ create_proxmox_vm_iso_bus }}", "{{ create_proxmox_vm_iso_str }}"]
+  when: create_proxmox_vm_attach_iso and ((create_proxmox_vm_cfg[create_proxmox_vm_iso_bus] | default('')) != create_proxmox_vm_iso_str)
+  register: create_proxmox_vm_set_iso
+  changed_when: create_proxmox_vm_set_iso.rc == 0
+  delegate_to: "{{ proxmox_host_name }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+
+- name: Ensure boot order
+  ansible.builtin.command:
+    argv: ["qm", "set", "{{ create_proxmox_vm_vmid }}", "--boot", "{{ create_proxmox_vm_boot_str }}"]
+  when: (create_proxmox_vm_cfg.boot | default('')) != create_proxmox_vm_boot_str
+  register: create_proxmox_vm_set_boot
+  changed_when: create_proxmox_vm_set_boot.rc == 0
+  delegate_to: "{{ proxmox_host_name }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+
+- name: Start VM
+  community.general.proxmox_kvm:
+    api_host: "{{ create_proxmox_vm_pve_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    validate_certs: "{{ create_proxmox_vm_validate_certs }}"
+    node: "{{ proxmox_host_name }}"
+    vmid: "{{ create_proxmox_vm_vmid }}"
+    state: started
+    timeout: 1000
+  delegate_to: localhost
+  no_log: true
+
+- name: Wait 700s for Proxmox to boot and install OS
+  ansible.builtin.pause:
+    seconds: 700
+
+- name: Shutdown VM
+  community.general.proxmox_kvm:
+    api_host: "{{ create_proxmox_vm_pve_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id | default(omit) }}"
+    api_token_secret: "{{ proxmox_api_token_secret | default(omit) }}"
+    validate_certs: "{{ create_proxmox_vm_validate_certs }}"
+    node: "{{ proxmox_host_name }}"
+    vmid: "{{ create_proxmox_vm_vmid }}"
+    state: stopped
+    timeout: 60
+  delegate_to: localhost
+  no_log: true
