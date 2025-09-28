@@ -1,0 +1,38 @@
+#cloud-config
+autoinstall:
+  version: 1
+  identity:
+    hostname: {{ hostname }}
+    username: {{ username }}
+    # mkpasswd --method=yescrypt
+    password: "{{ password_hash }}"
+  ssh:
+    install-server: true
+    allow-pw: false
+    ssh_authorized_keys:
+{% if ansible_ssh_key is defined %}
+      - {{ ansible_ssh_key }}
+{% endif %}
+{% for key in ssh_authorized_keys | default([]) %}
+      - {{ key }}
+{% endfor %}
+  storage:
+    layout:
+      name: {{ storage_layout }}
+  packages:
+{% for pkg in custom_packages | default([]) %}
+    - {{ pkg }}
+{% endfor %}
+  late-commands:
+    - curtin in-target --target=/target -- bash -lc 'echo "Autoinstall complete" > /root/README.txt'
+
+disable_root: true
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+
+
+runcmd:
+{% for cmd in custom_runcmd | default([]) %}
+  - {{ cmd }}
+{% endfor %}

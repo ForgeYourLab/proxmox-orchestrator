@@ -1,0 +1,22 @@
+- name: Validate vmid
+  ansible.builtin.assert:
+    that:
+      - cleanup_nocloud_seed_vmid is defined
+      - (cleanup_nocloud_seed_vmid | string) | length > 0
+    fail_msg: "cleanup_nocloud_seed_vmid (vmid) is required"
+
+- name: Validate all paths are under snippets dir
+  ansible.builtin.assert:
+    that: "'{{ cleanup_nocloud_seed_snippets_dir }}/' in (item | dirname ~ '/')"
+    fail_msg: "Refusing to remove outside {{ cleanup_nocloud_seed_snippets_dir }}"
+  loop: "{{ cleanup_nocloud_seed_files }}"
+
+- name: Remove NoCloud snippet files on Proxmox
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ cleanup_nocloud_seed_files }}"
+  delegate_to: "{{ cleanup_nocloud_seed_proxmox_host }}"
+  remote_user: "{{ proxmox_ssh_user }}"
+  register: cleanup_nocloud_seed_removed
+  no_log: true

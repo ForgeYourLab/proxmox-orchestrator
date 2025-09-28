@@ -1,0 +1,59 @@
+create_proxmox_vm_pve_host: "{{ proxmox_host_name | default('proxmox') }}"
+create_proxmox_vm_pve_node: "{{ create_proxmox_vm_pve_host }}"
+
+create_proxmox_vm_vmid: "{{ vmid }}"
+create_proxmox_vm_name: "{{ hostname }}"
+
+create_proxmox_vm_tags_list: "{{ vm_tags | default([]) }}"
+
+create_proxmox_vm_cpu_type: "{{ cpu.type | default('x86-64-v2-AES') }}"
+create_proxmox_vm_sockets: "{{ cpu.sockets | default(1) }}"
+create_proxmox_vm_cores: "{{ cpu.cores | default(1) }}"
+create_proxmox_vm_memory_mb: "{{ cpu.memory_mb | default(4096) }}"
+create_proxmox_vm_ostype: "{{ ostype | default('l26') }}"
+create_proxmox_vm_qemu_agent: "{{ qemu_agent | default(false) | bool }}"
+
+create_proxmox_vm_disk_bus: "{{ disk.bus | default('scsi0') }}"
+create_proxmox_vm_storage: "{{ disk.storage | default('local') }}"
+create_proxmox_vm_disk_size: "{{ disk.size | default('20G') }}"
+create_proxmox_vm_disk_size_gb: "{{ (create_proxmox_vm_disk_size | string) | regex_replace('[^0-9]', '') | int }}"
+create_proxmox_vm_scsihw: "{{ disk.scsihw | default('virtio-scsi-pci') }}"
+create_proxmox_vm_bootdisk: "{{ disk.bootdisk | default('scsi0') }}"
+
+create_proxmox_vm_scsi_spec: "{{ create_proxmox_vm_disk_bus }}:{{ create_proxmox_vm_storage }}:{{ create_proxmox_vm_disk_size }}"
+
+create_proxmox_vm_net_model: "{{ network.model | default('virtio') }}"
+create_proxmox_vm_network_bridge: "{{ network.bridge | default('vmbr0') }}"
+create_proxmox_vm_network_vlan: "{{ network.vlan | default(omit) }}"
+create_proxmox_vm_network_firewall: "{{ network.firewall | default(true) | bool }}"
+
+create_proxmox_vm_net0_string: >-
+  {{ create_proxmox_vm_net_model }}, bridge={{ create_proxmox_vm_network_bridge }}
+  {{ (create_proxmox_vm_network_vlan is not none) | ternary(',tag=' ~ create_proxmox_vm_network_vlan, '') }}
+  {{ create_proxmox_vm_network_firewall | ternary(',firewall=1','') }}
+
+create_proxmox_vm_net_map:
+  net0: "{{ create_proxmox_vm_net0_string | regex_replace('\\s+', '') }}"
+
+# === Cloud-Init (native NoCloud) ===
+create_proxmox_vm_ci_bus: "{{ cloud_init.bus | default('ide2') }}"
+create_proxmox_vm_ci_storage: "{{ cloud_init.storage | default(create_proxmox_vm_storage) }}"
+create_proxmox_vm_snippets_dir: "/var/lib/vz/snippets"
+create_proxmox_vm_user_snippet: "vm-{{ create_proxmox_vm_vmid }}-user.yaml"
+create_proxmox_vm_meta_snippet: "vm-{{ create_proxmox_vm_vmid }}-meta.yaml"
+create_proxmox_vm_attach_iso: "{{ iso.attach | default(false) | bool }}"
+create_proxmox_vm_iso_storage: "{{ iso.storage | default(create_proxmox_vm_storage) }}"
+create_proxmox_vm_iso_file: "{{ iso.file | default('ubuntu-24.04.1-live-server-amd64.iso') }}"
+create_proxmox_vm_iso_bus: "{{ iso.bus | default('ide0') }}"
+
+create_proxmox_vm_boot_order_list: "{{ boot.order | default(['scsi0', create_proxmox_vm_ci_bus, create_proxmox_vm_iso_bus]) }}"
+create_proxmox_vm_boot_order_str: "{{ create_proxmox_vm_boot_order_list | join(';') }}"
+create_proxmox_vm_set_boot_order: true
+
+create_proxmox_vm_validate_certs: false
+create_proxmox_vm_start: false
+
+create_proxmox_vm_ci_target: "{{ create_proxmox_vm_ci_storage }}:cloudinit"
+create_proxmox_vm_cicustom: >-
+  user={{ create_proxmox_vm_ci_storage }}:snippets/{{ create_proxmox_vm_user_snippet }},
+  meta={{ create_proxmox_vm_ci_storage }}:snippets/{{ create_proxmox_vm_meta_snippet }}

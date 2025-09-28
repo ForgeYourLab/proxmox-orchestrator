@@ -1,0 +1,8 @@
+cleanup_nocloud_seed_proxmox_host: "{{ proxmox_host_name | default('proxmox') }}"
+cleanup_nocloud_seed_vmid: "{{ vmid }}"
+cleanup_nocloud_seed_snippets_dir: "/var/lib/vz/snippets"
+cleanup_nocloud_seed_prefix: "vm-{{ cleanup_nocloud_seed_vmid }}"
+cleanup_nocloud_seed_files:
+  - "{{ cleanup_nocloud_seed_snippets_dir }}/{{ cleanup_nocloud_seed_prefix }}-meta.yaml"
+  - "{{ cleanup_nocloud_seed_snippets_dir }}/{{ cleanup_nocloud_seed_prefix }}-user.yaml"
+cleanup_nocloud_seed_report: false

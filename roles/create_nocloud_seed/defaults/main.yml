@@ -1,0 +1,4 @@
+create_nocloud_seed_temp_dir: "/tmp/nocloud_{{ inventory_hostname }}"
+create_nocloud_seed_disk_size: 1G
+create_nocloud_seed_disk_format: qcow2
+create_nocloud_seed_label: "cidata"
